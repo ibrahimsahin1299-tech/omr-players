@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -5,14 +6,16 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../models/channel.dart';
+
 class PlayerScreen extends StatefulWidget {
-  final String url;
-  final String title;
+  final List<Channel> channels;
+  final int initialIndex;
 
   const PlayerScreen({
     super.key,
-    required this.url,
-    required this.title,
+    required this.channels,
+    required this.initialIndex,
   });
 
   @override
@@ -23,8 +26,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late final Player player;
   late final VideoController controller;
 
-  final FocusNode _rootFocus = FocusNode(debugLabel: 'player-root');
-  final FocusNode _playFocus = FocusNode(debugLabel: 'player-play');
+  late int _currentIndex;
+
+  late final FocusNode _rootFocus;
+  late final FocusNode _playFocus;
 
   final List<StreamSubscription> _subs = [];
   Timer? _hideTimer;
@@ -35,12 +40,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String? _error;
   bool _controlsVisible = true;
 
+  Channel get _currentChannel => widget.channels[_currentIndex];
+
+  bool get _hasPrevious => _currentIndex > 0;
+  bool get _hasNext => _currentIndex < widget.channels.length - 1;
+
   @override
   void initState() {
     super.initState();
 
-    // Tam ekran, sistem çubukları gizli
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _currentIndex = widget.initialIndex.clamp(
+      0,
+      widget.channels.length - 1,
+    );
+
+    _rootFocus = FocusNode(debugLabel: 'player-root');
+    _playFocus = FocusNode(debugLabel: 'player-play');
+
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.immersiveSticky,
+    );
 
     player = Player();
     controller = VideoController(player);
@@ -48,29 +67,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subs.addAll([
       player.stream.playing.listen((v) {
         if (!mounted) return;
+
         setState(() => _playing = v);
+
         if (!v) {
-          _show(); // duraklatılınca kontroller açık kalsın
+          _show();
         } else {
           _scheduleHide();
         }
       }),
+
       player.stream.buffering.listen((v) {
-        if (mounted) setState(() => _buffering = v);
+        if (mounted) {
+          setState(() => _buffering = v);
+        }
       }),
+
       player.stream.volume.listen((v) {
-        if (mounted) setState(() => _volume = v);
+        if (mounted) {
+          setState(() => _volume = v);
+        }
       }),
+
       player.stream.error.listen((e) {
         if (!mounted) return;
+
         setState(() => _error = e);
         _show();
       }),
     ]);
 
-    player.open(Media(widget.url));
+    _openCurrentChannel();
 
     _scheduleHide();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _playFocus.requestFocus();
     });
@@ -79,40 +109,90 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     _hideTimer?.cancel();
+
     for (final s in _subs) {
       s.cancel();
     }
+
     _rootFocus.dispose();
     _playFocus.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.edgeToEdge,
+    );
+
     player.dispose();
+
     super.dispose();
+  }
+
+  // ---------- Kanal işlemleri ----------
+
+  void _openCurrentChannel() {
+    if (widget.channels.isEmpty) return;
+
+    setState(() {
+      _error = null;
+      _buffering = true;
+    });
+
+    player.open(
+      Media(_currentChannel.url),
+    );
+
+    _scheduleHide();
+  }
+
+  void _changeChannel(int direction) {
+    final nextIndex = _currentIndex + direction;
+
+    if (nextIndex < 0 ||
+        nextIndex >= widget.channels.length) {
+      return;
+    }
+
+    setState(() {
+      _currentIndex = nextIndex;
+      _error = null;
+      _buffering = true;
+    });
+
+    _openCurrentChannel();
+    _show();
   }
 
   // ---------- Kontrollerin görünürlüğü ----------
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 5), () {
-      if (!mounted || !_playing || _error != null) return;
-      _hide();
-    });
+
+    _hideTimer = Timer(
+      const Duration(seconds: 5),
+      () {
+        if (!mounted || !_playing || _error != null) return;
+        _hide();
+      },
+    );
   }
 
   void _hide() {
     if (!_controlsVisible) return;
+
     setState(() => _controlsVisible = false);
     _rootFocus.requestFocus();
   }
 
   void _show() {
     if (!mounted) return;
+
     if (!_controlsVisible) {
       setState(() => _controlsVisible = true);
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _playFocus.requestFocus();
       });
     }
+
     _scheduleHide();
   }
 
@@ -125,12 +205,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
 
     final key = event.logicalKey;
 
-    // Geri tuşu normal çalışsın
-    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack) {
       return KeyEventResult.ignored;
     }
 
@@ -140,14 +222,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return KeyEventResult.handled;
     }
 
-    if (_controlsVisible) {
-      _scheduleHide();
-      return KeyEventResult.ignored;
+    if (!_controlsVisible) {
+      _show();
+      return KeyEventResult.handled;
     }
 
-    // Kontroller gizliyken herhangi bir tuş sadece onları açar
-    _show();
-    return KeyEventResult.handled;
+    _scheduleHide();
+
+    return KeyEventResult.ignored;
   }
 
   void _toggleMute() {
@@ -156,12 +238,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _retry() {
-    setState(() {
-      _error = null;
-      _buffering = true;
-    });
-    player.open(Media(widget.url));
-    _scheduleHide();
+    _openCurrentChannel();
   }
 
   // ---------- Arayüz ----------
@@ -278,7 +355,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         ),
 
-        // Üst çubuk: geri + kanal adı
+        // Üst çubuk
         Positioned(
           top: 0,
           left: 0,
@@ -295,19 +372,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                   const SizedBox(width: 20),
                   Expanded(
-                    child: Text(
-                      widget.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.4,
-                        color: Colors.white,
-                        shadows: [
-                          Shadow(blurRadius: 12, color: Colors.black54),
-                        ],
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _currentChannel.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4,
+                            color: Colors.white,
+                            shadows: [
+                              Shadow(
+                                blurRadius: 12,
+                                color: Colors.black54,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          '${_currentIndex + 1} / ${widget.channels.length} kanal',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -316,7 +409,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         ),
 
-        // Alt çubuk: oynat/duraklat + ses
+        // Alt kontrol çubuğu
         Positioned(
           bottom: 0,
           left: 0,
@@ -328,6 +421,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _PlayerButton(
+                    icon: Icons.skip_previous_rounded,
+                    size: 60,
+                    onPressed: () => _changeChannel(-1),
+                  ),
+
+                  const SizedBox(width: 24),
+
+                  _PlayerButton(
                     focusNode: _playFocus,
                     icon: _playing
                         ? Icons.pause_rounded
@@ -338,7 +439,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       _scheduleHide();
                     },
                   ),
+
+                  const SizedBox(width: 24),
+
+                  _PlayerButton(
+                    icon: Icons.skip_next_rounded,
+                    size: 60,
+                    onPressed: () => _changeChannel(1),
+                  ),
+
                   const SizedBox(width: 28),
+
                   _PlayerButton(
                     icon: _volume == 0
                         ? Icons.volume_off_rounded
@@ -377,7 +488,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           const SizedBox(height: 8),
           const Text(
             'Bağlantıyı kontrol edip tekrar deneyin.',
-            style: TextStyle(fontSize: 16, color: Color(0xFF8E8E93)),
+            style: TextStyle(
+              fontSize: 16,
+              color: Color(0xFF8E8E93),
+            ),
           ),
           const SizedBox(height: 28),
           _PlayerButton(
@@ -392,8 +506,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 }
 
-/// tvOS tarzı buton: normalde yarı saydam, odaklanınca beyaz ve büyük.
-/// `label` verilirse hap (pill) şeklinde, yoksa daire olur.
+// ---------- Player butonu ----------
+
 class _PlayerButton extends StatefulWidget {
   final IconData icon;
   final String? label;
@@ -419,13 +533,20 @@ class _PlayerButtonState extends State<_PlayerButton> {
   @override
   Widget build(BuildContext context) {
     final fg = _focused ? Colors.black : Colors.white;
-    final bg = _focused ? Colors.white : Colors.white.withOpacity(0.16);
+    final bg = _focused
+        ? Colors.white
+        : Colors.white.withOpacity(0.16);
+
     final hasLabel = widget.label != null;
 
     return FocusableActionDetector(
       focusNode: widget.focusNode,
-      onShowFocusHighlight: (v) => setState(() => _focused = v),
-      onShowHoverHighlight: (v) => setState(() => _focused = v),
+      onShowFocusHighlight: (v) {
+        setState(() => _focused = v);
+      },
+      onShowHoverHighlight: (v) {
+        setState(() => _focused = v);
+      },
       actions: {
         ActivateIntent: CallbackAction<ActivateIntent>(
           onInvoke: (_) {
@@ -450,7 +571,9 @@ class _PlayerButtonState extends State<_PlayerButton> {
                 : EdgeInsets.zero,
             decoration: BoxDecoration(
               color: bg,
-              borderRadius: BorderRadius.circular(widget.size / 2),
+              borderRadius: BorderRadius.circular(
+                widget.size / 2,
+              ),
               boxShadow: _focused
                   ? [
                       BoxShadow(
@@ -465,7 +588,11 @@ class _PlayerButtonState extends State<_PlayerButton> {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(widget.icon, size: widget.size * 0.5, color: fg),
+                Icon(
+                  widget.icon,
+                  size: widget.size * 0.5,
+                  color: fg,
+                ),
                 if (hasLabel) ...[
                   const SizedBox(width: 10),
                   Text(

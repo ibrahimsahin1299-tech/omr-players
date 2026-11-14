@@ -50,22 +50,25 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
     });
   }
 
-  void _open(Channel channel) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 300),
-        pageBuilder: (_, __, ___) => PlayerScreen(
-          url: channel.url,
-          title: channel.name,
-        ),
-        transitionsBuilder: (_, animation, __, child) => FadeTransition(
-          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-          child: child,
-        ),
+void _open(int index) {
+  Navigator.push(
+    context,
+    PageRouteBuilder(
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (_, __, ___) => PlayerScreen(
+        channels: _visible,
+        initialIndex: index,
       ),
-    );
-  }
+      transitionsBuilder: (_, animation, __, child) => FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        ),
+        child: child,
+      ),
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -184,7 +187,7 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
                                 key: ValueKey('${_selected}_$i'),
                                 channel: channel,
                                 autofocus: i == 0,
-                                onTap: () => _open(channel),
+                                onTap: () => _open(i),
                               );
                             },
                           ),

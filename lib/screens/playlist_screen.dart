@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../models/channel.dart';
 import '../services/m3u_service.dart';
 import 'channels_screen.dart';
