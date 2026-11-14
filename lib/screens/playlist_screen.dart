@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/channel.dart';
 import '../services/m3u_service.dart';
@@ -12,9 +13,30 @@ class PlaylistScreen extends StatefulWidget {
 }
 
 class _PlaylistScreenState extends State<PlaylistScreen> {
+  static const _prefsKey = 'playlist_url';
+
   final TextEditingController _urlController = TextEditingController();
 
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreSavedUrl();
+  }
+
+  Future<void> _restoreSavedUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_prefsKey);
+    if (saved == null || saved.isEmpty || !mounted) return;
+
+    _urlController.text = saved;
+
+    // Açılışta kayıtlı listeyi otomatik yükle
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadPlaylist();
+    });
+  }
 
   Future<void> _loadPlaylist() async {
     final url = _urlController.text.trim();
@@ -34,6 +56,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     try {
       final List<Channel> channels = await M3UService().loadPlaylist(url);
+
+      // Başarılı yüklemeden sonra linki hatırla
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsKey, url);
 
       if (!mounted) return;
 
