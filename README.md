@@ -1,6 +1,7 @@
 # omr_players
 
-A new Flutter project.
+A new Flutter project.<img width="1672" height="941" alt="32602891-B700-4603-9177-691B960E003B" src="https://github.com/user-attachments/assets/a280db2b-3626-4bd8-bece-8278c19bf5cc" />
+
 
 ## Getting Started
 
