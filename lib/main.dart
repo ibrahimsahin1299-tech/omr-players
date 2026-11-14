@@ -1,21 +1,15 @@
 import 'package:flutter/material.dart';
-import 'theme/app_theme.dart';
-import 'screens/login_screen.dart';
+import 'package:media_kit/media_kit.dart';
+
+import 'screens/playlist_screen.dart';
 
 void main() {
-  runApp(const OMRPlayersApp());
-}
+  MediaKit.ensureInitialized();
 
-class OMRPlayersApp extends StatelessWidget {
-  const OMRPlayersApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
+  runApp(
+    const MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'OMR Players',
-      theme: AppTheme.dark,
-      home: const LoginScreen(),
-    );
-  }
+      home: PlaylistScreen(),
+    ),
+  );
 }

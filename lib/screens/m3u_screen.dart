@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/channel.dart';
+import '../services/m3u_service.dart';
+
 class M3UScreen extends StatefulWidget {
   const M3UScreen({super.key});
 
@@ -11,18 +14,25 @@ class M3UScreen extends StatefulWidget {
 class _M3UScreenState extends State<M3UScreen> {
   final TextEditingController _urlController = TextEditingController();
 
+  final M3UService _service = M3UService();
+
+  List<Channel> channels = [];
+
+  bool loading = false;
+
   @override
   void initState() {
     super.initState();
-    loadUrl();
+    _loadUrl();
   }
 
-  Future<void> loadUrl() async {
+  Future<void> _loadUrl() async {
     final prefs = await SharedPreferences.getInstance();
+
     _urlController.text = prefs.getString("m3u_url") ?? "";
   }
 
-  Future<void> saveUrl() async {
+  Future<void> _connect() async {
     final prefs = await SharedPreferences.getInstance();
 
     await prefs.setString(
@@ -30,13 +40,47 @@ class _M3UScreenState extends State<M3UScreen> {
       _urlController.text,
     );
 
+    setState(() {
+      loading = true;
+    });
+
+    try {
+      final result = await _service.loadPlaylist(
+        _urlController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        channels = result;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("${result.length} kanal bulundu"),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+        ),
+      );
+    }
+
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("M3U adresi kaydedildi."),
-      ),
-    );
+    setState(() {
+      loading = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    super.dispose();
   }
 
   @override
@@ -49,24 +93,55 @@ class _M3UScreenState extends State<M3UScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-
             TextField(
               controller: _urlController,
               decoration: const InputDecoration(
-                labelText: "M3U URL",
+                labelText: "Playlist URL",
                 hintText: "https://example.com/playlist.m3u",
                 border: OutlineInputBorder(),
               ),
             ),
 
-            const SizedBox(height: 25),
+            const SizedBox(height: 20),
 
             SizedBox(
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
-                onPressed: saveUrl,
-                child: const Text("Kaydet"),
+                onPressed: loading ? null : _connect,
+                child: const Text("Bağlan"),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            if (loading)
+              const CircularProgressIndicator(),
+
+            const SizedBox(height: 10),
+
+            Expanded(
+              child: ListView.builder(
+                itemCount: channels.length,
+                itemBuilder: (context, index) {
+                  final channel = channels[index];
+
+                  return Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.live_tv),
+                      title: Text(channel.name),
+                      subtitle: Text(channel.group),
+                      trailing: const Icon(Icons.arrow_forward_ios),
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(channel.name),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
               ),
             ),
           ],
